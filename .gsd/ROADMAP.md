@@ -20,7 +20,7 @@
 **Objective**: Calendar availability API, fiat booking flow, overlap prevention logic.
 
 ### Phase 3: The Unique Hook (Weeks 5-6)
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Socket.io server namespace, barter negotiation chat room.
 
 ### Phase 4: Polish & Delivery (Weeks 7-8)

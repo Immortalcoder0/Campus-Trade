@@ -1,5 +1,7 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const connectDB = require('./config/db');
@@ -8,6 +10,18 @@ const connectDB = require('./config/db');
 connectDB();
 
 const app = express();
+const server = http.createServer(app);
+
+// Init Socket.io
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.CLIENT_ORIGIN || '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+// Attach Barter Namespace
+require('./sockets/barterNamespace')(io);
 
 // Init Middleware
 app.use(helmet()); // Security headers
@@ -25,4 +39,4 @@ app.get('/api/v1/health', (req, res) => res.json({ success: true, message: 'API 
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
