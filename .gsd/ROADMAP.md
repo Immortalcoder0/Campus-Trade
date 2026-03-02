@@ -12,7 +12,7 @@
 ## Phases
 
 ### Phase 1: Foundation (Weeks 1-2)
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: MongoDB schema setup, custom JWT/OTP user authentication, basic item CRUD.
 
 ### Phase 2: Core Engine (Weeks 3-4)
