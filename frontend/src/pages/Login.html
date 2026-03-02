@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CampusTrade Login</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#13ec13",
+                        "background-light": "#f6f8f6",
+                        "background-dark": "#102210",
+                    },
+                    fontFamily: {
+                        "display": ["Lexend"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col items-center">
+<div class="relative flex h-full min-h-screen w-full max-w-[430px] flex-col bg-background-light dark:bg-background-dark overflow-x-hidden shadow-2xl">
+<!-- Header / Navigation -->
+<div class="flex items-center bg-transparent p-4 justify-between">
+<div class="text-slate-900 dark:text-slate-100 flex size-12 shrink-0 items-center justify-start">
+<span class="material-symbols-outlined text-2xl">close</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pr-12">CampusTrade</h2>
+</div>
+<!-- Hero Section -->
+<div class="@container">
+<div class="px-6 py-4">
+<div class="w-full bg-center bg-no-repeat bg-cover flex flex-col justify-end overflow-hidden bg-primary/10 rounded-xl min-h-[220px] shadow-sm" data-alt="Students walking on a sunny university campus green" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBxPw9hHkuFE5pJQBjUk9y_9qyHF5CNzZALgbVoK3e18Tt2i3kUyRer5Q6YC45DEYulX9vbo8am5loFqL51H1n7-ic4_O-dw-uXxprFqCp-xVrsPE2QE_A4FJFR7LbJECayEOt7YG7gMXocOAu2m2k4hUwa1OA03NSxgnoI700JLIWQZUFscKY9UdTKRZ4mwuIidq4QoeZy2cTcx-0h-H3DAf2CzKl2dYmWYQOjhNvvSYTa-m4g9H0mbe1B-Q2WfAzcx4KqZLh3WbEy");'>
+</div>
+</div>
+</div>
+<!-- Welcome Text -->
+<div class="px-6 pt-6 pb-2">
+<h1 class="text-slate-900 dark:text-slate-100 tracking-tight text-3xl font-bold leading-tight text-center">Welcome Back</h1>
+<p class="text-slate-600 dark:text-slate-400 text-base font-normal leading-normal pt-2 text-center">Access the safest university marketplace</p>
+</div>
+<!-- Login Form -->
+<div class="flex flex-col gap-5 px-6 py-4">
+<!-- Email Field -->
+<label class="flex flex-col w-full">
+<p class="text-slate-800 dark:text-slate-200 text-sm font-semibold leading-normal pb-2 ml-1">University Email</p>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined">alternate_email</span>
+</div>
+<input class="form-input block w-full pl-10 pr-4 h-14 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-slate-400" placeholder="yourname@university.edu" type="email"/>
+</div>
+</label>
+<!-- Password Field -->
+<label class="flex flex-col w-full">
+<div class="flex justify-between items-center pb-2 ml-1">
+<p class="text-slate-800 dark:text-slate-200 text-sm font-semibold leading-normal">Password</p>
+<a class="text-primary text-xs font-bold hover:underline" href="#">Forgot Password?</a>
+</div>
+<div class="relative group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary transition-colors">
+<span class="material-symbols-outlined">lock</span>
+</div>
+<input class="form-input block w-full pl-10 pr-10 h-14 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-slate-400" placeholder="••••••••" type="password"/>
+<div class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer text-slate-400">
+<span class="material-symbols-outlined">visibility</span>
+</div>
+</div>
+</label>
+<!-- Login Button -->
+<button class="w-full h-14 mt-4 bg-primary hover:bg-primary/90 text-slate-900 font-bold text-lg rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
+<span>Sign In</span>
+<span class="material-symbols-outlined">login</span>
+</button>
+<!-- Social Login Divider -->
+<div class="flex items-center my-4">
+<div class="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+<span class="px-3 text-slate-400 text-xs uppercase tracking-widest font-medium">Student SSO</span>
+<div class="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+</div>
+<!-- Single Sign On Option -->
+<button class="w-full h-12 flex items-center justify-center gap-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined text-primary">school</span>
+<span class="text-slate-700 dark:text-slate-200 font-medium">Continue with University Login</span>
+</button>
+</div>
+<!-- Footer Register Link -->
+<div class="mt-auto pb-10 px-6 text-center">
+<p class="text-slate-600 dark:text-slate-400 text-sm">
+                Don't have an account? 
+                <a class="text-primary font-bold hover:underline ml-1" href="#">Register instead</a>
+</p>
+</div>
+<!-- iOS Indicator bar imitation -->
+<div class="w-32 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-2"></div>
+</div>
+</body></html>
