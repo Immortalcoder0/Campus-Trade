@@ -1,0 +1,202 @@
+TECHNICAL REQUIREMENTS DOCUMENT
+CampusTrade
+Peer-to-Peer Micro-Rental & Barter Platform
+MERN Stack Implementation | Version 1.0 | March 2026
+
+
+1. Introduction & Scope
+This Technical Requirements Document (TRD) translates the CampusTrade Product Requirements Document into concrete engineering specifications. It defines the architecture, APIs, data models, algorithms, security controls, and non-functional requirements that the MERN-stack engineering team must implement.
+
+1.1 Document Purpose
+Provide unambiguous technical specifications derived from the PRD.
+Serve as the contract between product, design, and engineering.
+Define acceptance criteria for each deliverable phase.
+
+1.2 Intended Audience
+Full-stack / MERN engineers building the platform
+Technical lead / reviewer assessing architecture decisions
+QA engineer writing test cases
+
+1.3 Technology Stack Summary
+
+
+
+2. System Architecture
+2.1 High-Level Architecture
+CampusTrade follows a three-tier client-server architecture. The React SPA communicates exclusively through a versioned REST API (/api/v1/*) served by Express. Socket.io is mounted on the same Node process and uses a separate namespace (/barter) for real-time negotiation events.
+
+
+2.2 Request Flow
+Client sends HTTPS request to Express router.
+Auth middleware validates JWT from Authorization: Bearer header.
+Route handler calls service layer which executes parameterised SQL / ORM query.
+Response serialised to JSON; images referenced as CDN / signed S3 URLs.
+For barter rooms: client connects via Socket.io using the same JWT; server validates on the connect event.
+
+2.3 Environment Configuration
+All secrets must be stored in environment variables, never committed to the repository.
+DATABASE_URL — PostgreSQL connection string
+JWT_SECRET — HS256 secret (minimum 256-bit entropy)
+JWT_REFRESH_SECRET — separate secret for refresh tokens
+AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / S3_BUCKET — or CLOUDINARY_URL
+SMTP_HOST / SMTP_USER / SMTP_PASS — for verification emails
+CLIENT_ORIGIN — CORS whitelist (e.g., https://campustrade.app)
+
+
+3. Database Design
+3.1 Entity-Relationship Overview
+PostgreSQL is used as the relational database. Five core tables map the PRD entities; all primary keys are UUIDs (gen_random_uuid()) to prevent enumeration attacks.
+
+3.2 Table Specifications
+3.2.1 users
+
+3.2.2 items
+
+3.2.3 bookings
+
+Overlap Prevention Constraint (enforced at DB level):
+EXCLUDE USING gist (item_id WITH =, daterange(start_date, end_date, '[]') WITH &&) WHERE (status IN ('Pending','Active'));
+
+3.2.4 reviews
+
+3.2.5 barter_messages
+
+3.3 Indexes
+items: idx_items_owner_id, idx_items_category, idx_items_accepts_barter
+bookings: idx_bookings_item_id, idx_bookings_borrower_id, idx_bookings_status, idx_bookings_dates (GiST on daterange)
+reviews: idx_reviews_reviewee_id
+
+
+4. Authentication & Authorization
+4.1 Campus Restriction Implementation
+On registration, extract the domain from the submitted email.
+Reject if domain is not in ALLOWED_DOMAINS array (configurable; defaults to *.edu).
+On acceptance, generate a 6-digit OTP, hash it (SHA-256), store with 15-minute expiry, and send via Nodemailer.
+The /auth/verify endpoint accepts the OTP, validates hash + expiry, sets email_verified = TRUE.
+All protected routes require email_verified = TRUE (checked in middleware).
+
+4.2 JWT Strategy
+
+Refresh token stored in the database (hashed) for revocation support.
+On logout, delete refresh token from DB and clear cookie.
+
+4.3 Password Requirements
+Minimum 8 characters, at least one uppercase, one digit, one special character.
+Hashed with bcrypt cost factor 12 before storage; never logged or transmitted in plaintext.
+
+
+5. REST API Specification
+5.1 Base URL & Versioning
+All endpoints are prefixed /api/v1. Responses use JSON with consistent envelope:
+{ "success": true, "data": {}, "error": null }
+
+5.2 Endpoint Reference
+Auth Endpoints
+
+User Endpoints
+
+Item Endpoints
+
+Booking Endpoints
+
+Review Endpoints
+
+
+6. Core Business Logic
+6.1 Temporal Booking — Overlap Prevention
+The availability check must be atomic to prevent race conditions. Implementation strategy:
+Use PostgreSQL's daterange overlap exclusion constraint (Section 3.2.3) as the last-resort guard.
+Before insert, run a SELECT query with FOR UPDATE SKIP LOCKED to acquire a row-level advisory lock on the item_id.
+If any booking exists with status IN ('Pending','Active') and daterange overlaps the requested range, return HTTP 409 Conflict with a descriptive error.
+Frontend calendar greys out dates by pre-fetching /items/:id/availability on component mount and on month navigation.
+
+6.2 Barter Flow State Machine
+
+6.3 Trust Score Algorithm
+Recalculated server-side after every booking completion or penalty event. The formula from the PRD expressed as SQL / pseudocode:
+T_score = (W1 * R_completed/R_total) + (W2 * L_completed/L_total) - P_penalties
+
+
+Score is clamped between 0 and 100.
+New users start at 50. Users with fewer than 3 transactions display 'New User' badge.
+The recalculation is triggered asynchronously (background job / Promise.all) to avoid blocking the HTTP response.
+
+
+7. Real-Time WebSocket Specification
+7.1 Socket.io Configuration
+Namespace: /barter
+Transport: WebSocket with polling fallback
+Auth: JWT passed in socket.handshake.auth.token; validated in middleware before connection is permitted
+CORS: restricted to CLIENT_ORIGIN
+
+7.2 Events Reference
+Client → Server
+
+Server → Client
+
+7.3 Message Persistence
+Every send_message event is persisted to barter_messages before broadcasting.
+On room_joined, server fetches the last 50 messages from the DB and sends as history.
+
+
+8. File Upload Specification
+8.1 Flow
+Frontend sends POST /items with Content-Type: multipart/form-data.
+Express uses Multer (memory storage) to buffer files; validates MIME type (image/jpeg, image/png, image/webp) and max size (5 MB per file, max 5 files).
+Backend uploads to S3 / Cloudinary using server-side SDK with a generated UUID key.
+Resulting CDN URLs stored in items.image_urls array.
+
+8.2 Security Controls
+Signed URLs with 1-hour expiry for private items (S3 presigned URL pattern).
+File type validated by magic bytes (not just extension) using file-type npm package.
+Original filenames never stored or used in keys to prevent path traversal.
+
+
+9. Security Requirements
+
+9.1 HTTP Security Headers
+Helmet.js applied globally: sets X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, and Referrer-Policy.
+CORS: explicitly whitelist CLIENT_ORIGIN; reject all other origins.
+
+
+10. Frontend Technical Specifications
+10.1 Application Structure
+
+10.2 State Management
+Auth state: React Context + useReducer; access token stored in memory (never localStorage).
+Item listings: local useState with SWR or React Query for caching + revalidation.
+Barter room: Socket.io client events update local component state; no global store needed.
+
+10.3 Calendar Component
+Use react-calendar or build with date-fns; no heavyweight library required.
+On mount, fetch /items/:id/availability and disable all dates within returned ranges.
+Validate selected range client-side before submitting booking to prevent unnecessary round-trips.
+Dynamically calculate total price: (end_date - start_date + 1) * daily_price, displayed in real time.
+
+
+11. Non-Functional Requirements
+
+
+12. Development Phases & Technical Milestones
+
+
+13. Testing Requirements
+13.1 Unit Tests (Jest)
+Trust score calculation function with boundary cases (0 transactions, all penalties, perfect score).
+Date overlap detection utility function.
+JWT generation and verification helpers.
+
+13.2 Integration Tests (Supertest)
+Full registration → OTP verify → login flow.
+Create item → fetch availability → create booking → conflict attempt returns 409.
+Complete booking → trust score recalculated correctly.
+
+13.3 Socket Tests
+Use Socket.io client in test to simulate two-party barter session.
+Verify trade acceptance transitions booking status to Active.
+
+
+14. Open Technical Decisions
+
+
+CampusTrade TRD v1.0 — Generated from PRD v1.0 — March 2026

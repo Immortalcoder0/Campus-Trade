@@ -1,0 +1,358 @@
+TECHNICAL REQUIREMENTS DOCUMENT
+CampusTrade
+Peer-to-Peer Micro-Rental & Barter Platform
+MERN Stack Implementation | Version 1.0 | March 2026
+
+
+1. Introduction & Scope
+This Technical Requirements Document (TRD) translates the CampusTrade Product Requirements Document into concrete engineering specifications. It defines the architecture, APIs, data models, algorithms, security controls, and non-functional requirements that the MERN-stack engineering team must implement.
+
+1.1 Document Purpose
+Provide unambiguous technical specifications derived from the PRD.
+Serve as the contract between product, design, and engineering.
+Define acceptance criteria for each deliverable phase.
+
+1.2 Intended Audience
+Full-stack / MERN engineers building the platform
+Technical lead / reviewer assessing architecture decisions
+QA engineer writing test cases
+
+1.3 Technology Stack Summary
+
+Layer | Technology | Version / Notes
+Frontend | React.js (CRA or Vite) | v18+; React Router v6
+Styling | Tailwind CSS | v3+
+Backend | Node.js + Express.js | Node v20 LTS; Express v4
+Database | PostgreSQL | v15+; hosted via Supabase / Railway / RDS
+ORM / Query Builder | Sequelize or Knex.js | For migrations & type safety
+Real-time | Socket.io | v4; server + client
+Auth | JWT + bcrypt | Access + Refresh token pattern
+File Storage | AWS S3 or Cloudinary | Multipart upload from backend
+Email | Nodemailer + SMTP | For .edu verification emails
+Testing | Jest + Supertest | Unit + integration
+CI/CD | GitHub Actions | Lint, test, deploy pipeline
+
+
+2. System Architecture
+2.1 High-Level Architecture
+CampusTrade follows a three-tier client-server architecture. The React SPA communicates exclusively through a versioned REST API (/api/v1/*) served by Express. Socket.io is mounted on the same Node process and uses a separate namespace (/barter) for real-time negotiation events.
+
+Tier | Component | Responsibility
+Presentation | React SPA | Renders UI, manages local state, connects to REST + WS
+Application | Express API Server | Business logic, auth middleware, REST routing
+Real-time Layer | Socket.io (same process) | Barter negotiation rooms, presence events
+Persistence | PostgreSQL | Relational data: users, items, bookings, reviews
+Object Storage | S3 / Cloudinary | Item images; signed URLs served via API
+
+2.2 Request Flow
+Client sends HTTPS request to Express router.
+Auth middleware validates JWT from Authorization: Bearer header.
+Route handler calls service layer which executes parameterised SQL / ORM query.
+Response serialised to JSON; images referenced as CDN / signed S3 URLs.
+For barter rooms: client connects via Socket.io using the same JWT; server validates on the connect event.
+
+2.3 Environment Configuration
+All secrets must be stored in environment variables, never committed to the repository.
+DATABASE_URL — PostgreSQL connection string
+JWT_SECRET — HS256 secret (minimum 256-bit entropy)
+JWT_REFRESH_SECRET — separate secret for refresh tokens
+AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / S3_BUCKET — or CLOUDINARY_URL
+SMTP_HOST / SMTP_USER / SMTP_PASS — for verification emails
+CLIENT_ORIGIN — CORS whitelist (e.g., https://campustrade.app)
+
+
+3. Database Design
+3.1 Entity-Relationship Overview
+PostgreSQL is used as the relational database. Five core tables map the PRD entities; all primary keys are UUIDs (gen_random_uuid()) to prevent enumeration attacks.
+
+3.2 Table Specifications
+3.2.1 users
+Column | Type | Constraints | Notes
+user_id | UUID | PK, DEFAULT gen_random_uuid() | 
+name | VARCHAR(120) | NOT NULL | Full display name
+edu_email | VARCHAR(200) | NOT NULL, UNIQUE | Must end in .edu or allowed domain
+email_verified | BOOLEAN | DEFAULT FALSE | Set TRUE after OTP/link click
+password_hash | VARCHAR(255) | NOT NULL | bcrypt, cost factor 12
+trust_score | DECIMAL(5,2) | DEFAULT 50.00 | Recalculated on each transaction
+penalty_points | INTEGER | DEFAULT 0 | Incremented on late/damaged returns
+created_at | TIMESTAMPTZ | DEFAULT NOW() | 
+updated_at | TIMESTAMPTZ | DEFAULT NOW() | 
+
+3.2.2 items
+Column | Type | Constraints | Notes
+item_id | UUID | PK | 
+owner_id | UUID | FK → users(user_id) ON DELETE CASCADE | 
+title | VARCHAR(200) | NOT NULL | 
+description | TEXT | NOT NULL | 
+category | VARCHAR(80) |  | e.g. Electronics, Textbooks
+daily_price | DECIMAL(10,2) | NOT NULL, CHECK > 0 | Fiat rental price per day
+accepts_barter | BOOLEAN | DEFAULT FALSE | 
+barter_description | TEXT |  | NULL when accepts_barter = FALSE
+image_urls | TEXT[] |  | Array of S3 / CDN URLs
+is_available | BOOLEAN | DEFAULT TRUE | Soft-toggle by owner
+created_at | TIMESTAMPTZ | DEFAULT NOW() | 
+
+3.2.3 bookings
+Column | Type | Constraints | Notes
+booking_id | UUID | PK | 
+item_id | UUID | FK → items(item_id) | 
+borrower_id | UUID | FK → users(user_id) | 
+start_date | DATE | NOT NULL | Inclusive
+end_date | DATE | NOT NULL | Inclusive
+status | ENUM | Pending | Active | Completed | Cancelled | 
+payment_type | ENUM | Fiat | Barter | 
+total_amount | DECIMAL(10,2) |  | NULL for Barter bookings
+barter_terms | TEXT |  | Agreed terms captured on barter accept
+created_at | TIMESTAMPTZ | DEFAULT NOW() | 
+
+Overlap Prevention Constraint (enforced at DB level):
+EXCLUDE USING gist (item_id WITH =, daterange(start_date, end_date, '[]') WITH &&) WHERE (status IN ('Pending','Active'));
+
+3.2.4 reviews
+Column | Type | Constraints | Notes
+review_id | UUID | PK | 
+booking_id | UUID | FK → bookings(booking_id), UNIQUE | One review per booking
+reviewer_id | UUID | FK → users(user_id) | 
+reviewee_id | UUID | FK → users(user_id) | Subject of review
+rating | SMALLINT | CHECK 1..5 | 
+comment | TEXT |  | Optional
+created_at | TIMESTAMPTZ | DEFAULT NOW() | 
+
+3.2.5 barter_messages
+Column | Type | Constraints | Notes
+message_id | UUID | PK | 
+booking_id | UUID | FK → bookings(booking_id) | Links chat to booking
+sender_id | UUID | FK → users(user_id) | 
+content | TEXT | NOT NULL | 
+is_system | BOOLEAN | DEFAULT FALSE | For accept/reject system messages
+sent_at | TIMESTAMPTZ | DEFAULT NOW() | 
+
+3.3 Indexes
+items: idx_items_owner_id, idx_items_category, idx_items_accepts_barter
+bookings: idx_bookings_item_id, idx_bookings_borrower_id, idx_bookings_status, idx_bookings_dates (GiST on daterange)
+reviews: idx_reviews_reviewee_id
+
+
+4. Authentication & Authorization
+4.1 Campus Restriction Implementation
+On registration, extract the domain from the submitted email.
+Reject if domain is not in ALLOWED_DOMAINS array (configurable; defaults to *.edu).
+On acceptance, generate a 6-digit OTP, hash it (SHA-256), store with 15-minute expiry, and send via Nodemailer.
+The /auth/verify endpoint accepts the OTP, validates hash + expiry, sets email_verified = TRUE.
+All protected routes require email_verified = TRUE (checked in middleware).
+
+4.2 JWT Strategy
+Token | Expiry | Storage | Rotation
+Access Token | 15 minutes | Memory (React state / context) | Issued alongside each refresh
+Refresh Token | 7 days | httpOnly Secure SameSite=Strict cookie | Rotated on every /auth/refresh call
+
+Refresh token stored in the database (hashed) for revocation support.
+On logout, delete refresh token from DB and clear cookie.
+
+4.3 Password Requirements
+Minimum 8 characters, at least one uppercase, one digit, one special character.
+Hashed with bcrypt cost factor 12 before storage; never logged or transmitted in plaintext.
+
+
+5. REST API Specification
+5.1 Base URL & Versioning
+All endpoints are prefixed /api/v1. Responses use JSON with consistent envelope:
+{ "success": true, "data": {}, "error": null }
+
+5.2 Endpoint Reference
+Auth Endpoints
+Method | Path | Auth? | Description
+POST | /auth/register | No | Register with .edu email; triggers OTP email
+POST | /auth/verify | No | Submit OTP to verify email
+POST | /auth/login | No | Returns access token + sets refresh cookie
+POST | /auth/refresh | Cookie | Rotates refresh token; returns new access token
+POST | /auth/logout | Bearer | Invalidates refresh token
+
+User Endpoints
+Method | Path | Auth? | Description
+GET | /users/:id | Bearer | Get public profile + trust score
+PUT | /users/me | Bearer | Update name, avatar
+GET | /users/me/bookings | Bearer | Paginated booking history
+
+Item Endpoints
+Method | Path | Auth? | Description
+GET | /items | Optional | Paginated list; supports ?q=, ?category=, ?barter=true
+POST | /items | Bearer | Create listing with multipart/form-data (images)
+GET | /items/:id | Optional | Single item detail + unavailable dates array
+PUT | /items/:id | Bearer (owner) | Update listing
+DELETE | /items/:id | Bearer (owner) | Soft-delete (set is_available = FALSE)
+GET | /items/:id/availability | Optional | Returns array of booked date ranges
+
+Booking Endpoints
+Method | Path | Auth? | Description
+POST | /bookings | Bearer | Create booking; validates no date overlap
+GET | /bookings/:id | Bearer (parties) | Get booking detail
+PATCH | /bookings/:id/status | Bearer (owner) | Owner confirms/cancels Pending booking
+PATCH | /bookings/:id/complete | Bearer (owner) | Marks booking Completed; triggers trust score update
+POST | /bookings/:id/barter/accept | Bearer (owner) | Accepts barter; sets status Active, payment_type Barter
+
+Review Endpoints
+Method | Path | Auth? | Description
+POST | /reviews | Bearer | Submit review (only for Completed bookings, once each)
+GET | /reviews/user/:id | Optional | All reviews for a user
+
+
+6. Core Business Logic
+6.1 Temporal Booking — Overlap Prevention
+The availability check must be atomic to prevent race conditions. Implementation strategy:
+Use PostgreSQL's daterange overlap exclusion constraint (Section 3.2.3) as the last-resort guard.
+Before insert, run a SELECT query with FOR UPDATE SKIP LOCKED to acquire a row-level advisory lock on the item_id.
+If any booking exists with status IN ('Pending','Active') and daterange overlaps the requested range, return HTTP 409 Conflict with a descriptive error.
+Frontend calendar greys out dates by pre-fetching /items/:id/availability on component mount and on month navigation.
+
+6.2 Barter Flow State Machine
+State | Trigger | Next State | Side-Effect
+— | Borrower clicks 'Propose Barter' | Pending (Barter) | Booking row inserted; WS room opened
+Pending | Owner clicks 'Accept Trade' | Active (Barter) | booking.payment_type = Barter; system message sent
+Pending | Either party disconnects / 24h timeout | Cancelled | WS room closed; booking deleted
+Active | Owner marks item returned | Completed | Trust score recalculated for both users
+
+6.3 Trust Score Algorithm
+Recalculated server-side after every booking completion or penalty event. The formula from the PRD expressed as SQL / pseudocode:
+T_score = (W1 * R_completed/R_total) + (W2 * L_completed/L_total) - P_penalties
+
+Variable | Meaning | Value / Source
+W1 | Weight for review ratio | 40
+W2 | Weight for successful rental ratio | 60
+R_completed / R_total | Proportion of reviews with rating >= 4 | Queried from reviews table
+L_completed / L_total | Proportion of bookings with status = Completed | Queried from bookings table
+P_penalties | Fixed deduction per penalty event | 5 points per flagged event
+
+Score is clamped between 0 and 100.
+New users start at 50. Users with fewer than 3 transactions display 'New User' badge.
+The recalculation is triggered asynchronously (background job / Promise.all) to avoid blocking the HTTP response.
+
+
+7. Real-Time WebSocket Specification
+7.1 Socket.io Configuration
+Namespace: /barter
+Transport: WebSocket with polling fallback
+Auth: JWT passed in socket.handshake.auth.token; validated in middleware before connection is permitted
+CORS: restricted to CLIENT_ORIGIN
+
+7.2 Events Reference
+Client → Server
+Event | Payload | Description
+join_room | { booking_id } | Join barter room; server validates user is lender or borrower
+send_message | { booking_id, content } | Broadcast message to both parties
+accept_trade | { booking_id } | Lender only; triggers booking status update + system message
+reject_trade | { booking_id } | Either party; cancels booking + closes room
+
+Server → Client
+Event | Payload | Description
+room_joined | { booking_id, history: [] } | Sends last 50 messages on join
+new_message | { message_id, sender_id, content, sent_at } | Real-time message broadcast
+trade_accepted | { booking_id, barter_terms } | Both clients receive; triggers UI state change
+trade_rejected | { booking_id } | Room cleanup signal for both clients
+user_typing | { user_id } | Throttled typing indicator
+
+7.3 Message Persistence
+Every send_message event is persisted to barter_messages before broadcasting.
+On room_joined, server fetches the last 50 messages from the DB and sends as history.
+
+
+8. File Upload Specification
+8.1 Flow
+Frontend sends POST /items with Content-Type: multipart/form-data.
+Express uses Multer (memory storage) to buffer files; validates MIME type (image/jpeg, image/png, image/webp) and max size (5 MB per file, max 5 files).
+Backend uploads to S3 / Cloudinary using server-side SDK with a generated UUID key.
+Resulting CDN URLs stored in items.image_urls array.
+
+8.2 Security Controls
+Signed URLs with 1-hour expiry for private items (S3 presigned URL pattern).
+File type validated by magic bytes (not just extension) using file-type npm package.
+Original filenames never stored or used in keys to prevent path traversal.
+
+
+9. Security Requirements
+Threat | Control | Implementation Detail
+SQL Injection | Parameterised queries | Sequelize / Knex — never string-interpolate user input
+XSS | Output encoding + CSP header | React escapes by default; set Content-Security-Policy header
+CSRF | SameSite cookie + CSRF token | Refresh token cookie: SameSite=Strict; state-changing WS events require valid Bearer token
+Brute Force | Rate limiting | express-rate-limit: 10 req/min on /auth/login and /auth/verify
+Enumeration | UUID PKs | No sequential IDs exposed in URLs
+Unauthorised Access | Ownership middleware | Middleware checks req.user.id === resource.owner_id before mutation
+Insecure Upload | MIME + size validation | Magic-byte check + Multer limits (Section 8.2)
+Exposed Secrets | Environment variables | dotenv for local; secrets manager in production
+
+9.1 HTTP Security Headers
+Helmet.js applied globally: sets X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, and Referrer-Policy.
+CORS: explicitly whitelist CLIENT_ORIGIN; reject all other origins.
+
+
+10. Frontend Technical Specifications
+10.1 Application Structure
+Route | Component / Page | Auth Required
+/ | Landing / Item Browse | No
+/register | Registration Form + OTP Verify | No
+/login | Login Form | No
+/items/new | Create Listing Form | Yes
+/items/:id | Item Detail + Calendar | No
+/checkout/:itemId | Booking Checkout (Fiat or Barter) | Yes
+/barter/:bookingId | Real-time Negotiation Room | Yes
+/profile/:userId | Public Profile + Trust Score | No
+/dashboard | My Listings + Bookings | Yes
+
+10.2 State Management
+Auth state: React Context + useReducer; access token stored in memory (never localStorage).
+Item listings: local useState with SWR or React Query for caching + revalidation.
+Barter room: Socket.io client events update local component state; no global store needed.
+
+10.3 Calendar Component
+Use react-calendar or build with date-fns; no heavyweight library required.
+On mount, fetch /items/:id/availability and disable all dates within returned ranges.
+Validate selected range client-side before submitting booking to prevent unnecessary round-trips.
+Dynamically calculate total price: (end_date - start_date + 1) * daily_price, displayed in real time.
+
+
+11. Non-Functional Requirements
+Category | Requirement | Target
+Performance | API response time (p95) | < 300 ms for read endpoints
+Performance | Calendar availability load | < 500 ms end-to-end
+Reliability | Uptime | 99% (development MVP; not SLA-bound)
+Scalability | Concurrent WS connections (MVP) | 50 simultaneous barter rooms
+Security | Session invalidation | Refresh token revoked within 1 second of logout
+Usability | Mobile responsiveness | Full feature parity on 360px+ viewports
+Accessibility | WCAG compliance | AA level for all interactive elements
+Data Retention | Cancelled booking messages | Deleted after 30 days (scheduled CRON)
+
+
+12. Development Phases & Technical Milestones
+Phase | Weeks | Technical Deliverables | Acceptance Criteria
+Phase 1: Foundation | 1–2 | DB schema + migrations; Sequelize models; /auth/* endpoints; email OTP flow; basic CRUD for users + items | Can register, verify email, login, create listing. All auth tests pass.
+Phase 2: Core Engine | 3–4 | Calendar availability API; overlap exclusion constraint; fiat booking flow; booking state machine | Cannot double-book same item. Booking creates, confirms, completes. Price computed correctly.
+Phase 3: Unique Hook | 5–6 | Socket.io server + /barter namespace; barter room events; trade accept/reject logic; message persistence | Two clients can open barter room, chat in real time, and owner can accept trade, changing booking status.
+Phase 4: Polish | 7–8 | Trust score algorithm; file upload to S3/Cloudinary; responsive UI polish; rate limiting; Helmet headers; Jest tests; CI/CD pipeline | Trust score updates after completion. Images served from CDN. All security headers present. Test coverage > 70%.
+
+
+13. Testing Requirements
+13.1 Unit Tests (Jest)
+Trust score calculation function with boundary cases (0 transactions, all penalties, perfect score).
+Date overlap detection utility function.
+JWT generation and verification helpers.
+
+13.2 Integration Tests (Supertest)
+Full registration → OTP verify → login flow.
+Create item → fetch availability → create booking → conflict attempt returns 409.
+Complete booking → trust score recalculated correctly.
+
+13.3 Socket Tests
+Use Socket.io client in test to simulate two-party barter session.
+Verify trade acceptance transitions booking status to Active.
+
+
+14. Open Technical Decisions
+Item | Question | Recommended Default
+Payment Gateway | PRD simulates fiat payments. Should Stripe be integrated? | Stripe test mode in Phase 2 for realism
+Push Notifications | Notify lender of new booking request via email? | Yes — Nodemailer on booking creation
+ORM Choice | Sequelize vs Knex.js vs Prisma? | Prisma for DX + type safety if Node v20
+Hosting | Where is the MVP deployed? | Render.com (free tier) for API; Vercel for React
+Domain Allowlist | Hard-code .edu or make admin-configurable? | Config file first; admin UI in Phase 4 if time permits
+
+
+CampusTrade TRD v1.0 — Generated from PRD v1.0 — March 2026
