@@ -1,4 +1,5 @@
 const Item = require('../models/Item');
+const Booking = require('../models/Booking');
 
 // @desc    Create new item
 // @route   POST /api/v1/items
@@ -113,6 +114,28 @@ exports.deleteItem = async (req, res) => {
     await item.save();
 
     res.status(200).json({ success: true, message: 'Item removed (soft delete)' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// @desc    Get item availability
+// @route   GET /api/v1/items/:id/availability
+// @access  Public
+exports.getItemAvailability = async (req, res) => {
+  try {
+    const item = await Item.findById(req.params.id);
+    if (!item || !item.is_available) {
+      return res.status(404).json({ success: false, message: 'Item not found or unavailable' });
+    }
+
+    const bookings = await Booking.find({
+      item_id: req.params.id,
+      status: { $in: ['Pending', 'Active'] }
+    }).select('start_date end_date -_id');
+
+    res.status(200).json({ success: true, count: bookings.length, data: bookings });
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ success: false, message: 'Server error' });

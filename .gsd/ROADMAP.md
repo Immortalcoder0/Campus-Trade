@@ -16,7 +16,7 @@
 **Objective**: MongoDB schema setup, custom JWT/OTP user authentication, basic item CRUD.
 
 ### Phase 2: Core Engine (Weeks 3-4)
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Calendar availability API, fiat booking flow, overlap prevention logic.
 
 ### Phase 3: The Unique Hook (Weeks 5-6)
