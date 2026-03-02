@@ -4,41 +4,44 @@ plan: 3
 wave: 2
 ---
 
-# Plan 1.3: Basic CRUD Models (Users and Items)
+# Plan 1.3: User Profile & Item CRUD APIs
 
 ## Objective
-Implement frontend API calls and state management to read/write User profiles and Item listings directly against Supabase.
+Implement Express REST API endpoints to read/update User profiles and manage Item listings, completing Phase 1 foundation.
 
 ## Context
 - .gsd/SPEC.md
-- TRD Core Business Logic (basic item CRUD requirements before calendar logic).
+- TRD Section 5.2: Endpoint Reference
+- Mongoose Models from Plan 1.1 + Auth JWT from Plan 1.2
 
 ## Tasks
 
 <task type="auto">
-  <name>Implement User Profile Fetch/Update</name>
-  <files>frontend/src/lib/api/users.js</files>
+  <name>User Profile API Endpoints</name>
+  <files>backend/controllers/userController.js, backend/routes/userRoutes.js</files>
   <action>
-    - Create functions to fetch current user profile (`supabase.from('users').select()`).
-    - Create function to update user name/avatar.
-    - Ensure RLS (Row Level Security) is assumed (user functions only fetch/update where `id = auth.uid()`).
+    - Create `GET /api/v1/users/me`: Return the authenticated user's profile (trust_score, name) using `req.user` from the JWT middleware.
+    - Create `PUT /api/v1/users/me`: Update name, avatar.
+    - Ensure all user routes use the `authMiddleware` to enforce Bearer token verification.
   </action>
-  <verify>Check for proper Supabase query syntax and error handling.</verify>
-  <done>User profile can be retrieved and updated via the functions.</done>
+  <verify>Test the endpoint using a valid Bearer Token for a verified user and check if the profile returns accurately.</verify>
+  <done>User endpoints correctly handle read and update operations securely.</done>
 </task>
 
 <task type="auto">
-  <name>Implement Item Listing CRUD</name>
-  <files>frontend/src/lib/api/items.js</files>
+  <name>Basic Item CRUD Endpoints</name>
+  <files>backend/controllers/itemController.js, backend/routes/itemRoutes.js</files>
   <action>
-    - Create `createItem`, `fetchItems`, `fetchItemById`, `updateItem`, and `deleteItem` functions utilizing Supabase `from('items')`.
-    - `fetchItems` should support basic querying (all available items).
-    - Hardcode empty image arrays for now (Deferred S3/Cloudinary upload to Phase 4).
+    - Create `POST /api/v1/items`: Create an item linked to `req.user.id` (Auth required).
+    - Create `GET /api/v1/items`: List all items where `is_available = TRUE`. Support basic query params like `?category=`. (Auth optional).
+    - Create `GET /api/v1/items/:id`: Return single item details.
+    - Create `PUT /api/v1/items/:id`: Update item details (Ensure `req.user.id` matches `item.owner_id`).
+    - Create `DELETE /api/v1/items/:id`: Soft-delete the item (set `is_available = FALSE`).
   </action>
-  <verify>Check that CRUD operations correctly interface with the `items` table.</verify>
-  <done>Basic item listings can be created and retrieved from the database.</done>
+  <verify>Test creating an item using a Bearer token, then try to update it using a different user's token (should fail ownership check 403).</verify>
+  <done>Full item CRUD cycle operates smoothly with strict owner-authorization where required.</done>
 </task>
 
 ## Success Criteria
-- [ ] Profile reading/writing functionality is complete.
-- [ ] Item creation and reading functionality is complete without breaking.
+- [ ] User profiles can be securely retrieved and updated.
+- [ ] Items can be created, edited, and soft-deleted by their respective owners.

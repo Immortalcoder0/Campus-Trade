@@ -21,9 +21,9 @@ A localized, peer-to-peer micro-rental marketplace restricted to the campus ecos
 - The Campus Hustler (Lender)
 
 ## Constraints
-- Technical: React.js UI, Node/Express/Postgres backend.
-- Implementation: Strict PostgreSQL UUIDs, overlap exclusion constraint logic.
-- Operational: Image uploads to S3/Cloudinary, JWT rotation for security.
+- **Technical**: React.js UI, Node/Express/MongoDB backend (MERN stack).
+- **Implementation**: Mongoose schemas requiring strict custom overlap exclusion logic for temporal bookings.
+- **Operational**: Image uploads to Cloudinary (MVP), custom JWT generation and validation.
 
 ## Success Criteria
 - [ ] Students can sign up and verify via .edu OTP.
