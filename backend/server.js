@@ -35,6 +35,7 @@ app.use('/api/v1/users', require('./routes/userRoutes'));
 app.use('/api/v1/items', require('./routes/itemRoutes'));
 app.use('/api/v1/bookings', require('./routes/bookingRoutes'));
 app.use('/api/v1/payments', require('./routes/paymentRoutes'));
+app.use('/api/v1/reviews', require('./routes/reviewRoutes'));
 app.get('/api/v1/health', (req, res) => res.json({ success: true, message: 'API is running' }));
 
 const PORT = process.env.PORT || 5000;

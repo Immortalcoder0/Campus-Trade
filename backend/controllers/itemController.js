@@ -8,15 +8,20 @@ exports.createItem = async (req, res) => {
   try {
     const { title, description, category, daily_price, accepts_barter, barter_description } = req.body;
 
+    let image_urls = [];
+    if (req.files && req.files.length > 0) {
+      image_urls = req.files.map(file => file.path);
+    }
+
     const newItem = new Item({
       owner_id: req.user.id,
       title,
       description,
       category,
       daily_price,
-      accepts_barter,
+      accepts_barter: accepts_barter === 'true' || accepts_barter === true,
       barter_description,
-      image_urls: [] // Placeholder for Phase 4
+      image_urls
     });
 
     const item = await newItem.save();
